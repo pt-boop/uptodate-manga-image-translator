@@ -41,7 +41,7 @@ class DefaultDetector(OfflineDetector):
 
     async def _load(self, device: str):
         self.model = TextDetectionDefault()
-        sd = torch.load(self._get_file_path('detect.ckpt'), map_location='cpu')
+        sd = torch.load(self._get_file_path('detect-20241225.ckpt'), map_location='cpu')
         self.model.load_state_dict(sd['model'] if 'model' in sd else sd)
         self.model.eval()
         self.device = device
