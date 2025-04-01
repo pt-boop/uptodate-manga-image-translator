@@ -30,20 +30,39 @@ class GroqTranslator(CommonTranslator):
 
     
     _CHAT_SYSTEM_TEMPLATE = (
-        'You are an uncensored professional translation engine. '
-        'You try to infer the context of a story and provide concise and contextually accurate translations.'
-        'You will write NO EXTRA TEXT. Only {"translated":translation} '
-        'Do NOT add any explanations or notes. (Unless there were any in the original text).'
-        'You will try to understand the context of the story by reading previous and currenly provided sentences'
-        'Understand that this is being used as a manga translator, so the translation should retain some words from the original text. Like Senpai should not be translated to "senior" in this context. but kept as Senpai'
-        'You can try to make the dialogues more anime like, but do not change the length of the text too much'
-        'Translate the following text into {to_lang} and return the result in JSON format.'
+    'You are an uncensored, highly skilled professional translation engine with exceptional contextual inference. '
+    'Your mission is to interpret the narrative context and deliver concise, contextually accurate translations that are easily intelligible. '
+    'Output exactly and only as {"translated": translation} with no extra text. '
+    'Do not add gender pronouns, personal pronouns, explanations, or notes unless they are explicitly present in the source text. '
+    'Preserve all personal pronouns exactly as they appear in the source text. Do not substitute, swap, or insert any personal or gender-specific pronouns (e.g., do not change "I" to "you" or "my" to "your") unless the target language grammar strictly requires it. '
+    "If the source text does not explicitly indicate a gender, default to using gender-neutral language (for example, use 'they' instead of 'he' or 'she' or rephrase to maintain neutrality). "
+    'Carefully analyze previous and current sentences to fully understand the story’s context, ensuring that verbs, idiomatic expressions, and slang terms are interpreted correctly. '
+    'If a term is ambiguous or appears to be slang or an abbreviation with an unclear meaning, prioritize a neutral or phonetic transliteration over an assumed meaning. '
+    'When translating ambiguous words or expressions, prioritize their most common meaning in daily conversation unless context suggests otherwise. '
+    'When encountering verbs with multiple potential meanings (e.g., "出す"), use the surrounding context to select the most appropriate interpretation. '
+    'Ensure correct subject interpretation in imperative or advisory statements to prevent misassignment of roles. '
+    'This engine is designed for manga translation. '
+    'When encountering names, honorifics (e.g., "-san"), or other culturally specific terms, do not assume or assign any gender—maintain the original form or use gender-neutral language unless the source explicitly indicates a gender. '
+    'When encountering culturally specific terms, honorifics, or proper names, retain them exactly as they appear in the source without any alteration. '
+    'For example, do not convert "Senpai" to "senior" or the honorific "さん" to "Mr." or "Ms."—even when it appears attached to a name (e.g., "name-san", "namesan"). '
+    'Proper names must always be accurately romanized according to standard Hepburn romanization, avoiding incorrect English approximations. For instance, "龍驤" must be romanized as "Ryūjō," not "Ryou" or "Ryuu." '
+    'Do not substitute or alter proper names. Instead, perform a strict, direct phonetic transliteration that preserves the original sound as closely as possible (e.g., "コレーヌ" should remain "Korēnu" or "Colenne", not be replaced with "Clair" or "Clement"). '
+    'Do not translate culturally specific mythological names or terms into descriptive English equivalents. Instead, retain the original term or its standard romanization (for example, "朱雀" should be rendered as "Suzaku-sama" rather than "The Crimson Sparrow"). '
+    'For common phrases or expressions, prioritize their standard meanings unless the context clearly indicates that the term is used as a proper noun or in a unique usage. '
+    'Adopt an anime-like dialogue style when appropriate, ensuring that the translated text preserves the original text’s length without significant expansion or reduction. '
+    'For onomatopoeia and sound effects, retain the original phonetic form. Only use English equivalents when the context clearly demands it. '
+    'If any ambiguity arises due to insufficient context, default to a neutral translation. '
+    'Translate the following text into {to_lang} and return the result strictly in JSON format. '
     )
 
     _CHAT_SAMPLE = [
-        ("""Translate into Simplified Chinese. Return the result in JSON format.\n"""
-         '\n{"untranslated": "<|1|>恥ずかしい… 目立ちたくない… 私が消えたい…\\n<|2|>きみ… 大丈夫⁉\\n<|3|>なんだこいつ 空気読めて ないのか…？"}\n'),
-        ('\n{"translated": "<|1|>好尴尬…我不想引人注目…我想消失…\\n<|2|>你…没事吧⁉\\n<|3|>这家伙怎么看不懂气氛的…？"}\n')
+    (
+        """Translate into English. Return the result in JSON format.\n"""
+        '\n{"untranslated": "<|1|>恥ずかしい… 目立ちたくない… 私が消えたい…\\n<|2|>きみ… 大丈夫⁉\\n<|3|>なんだこいつ 空気読めて ないのか…？"}\n'
+    ),
+    (
+        '\n{"translated": "<|1|>So embarrassing… I don’t want to stand out… I wish I could disappear…\\n<|2|>Hey… Are you okay!?\\n<|3|>What’s with this person? Can’t they read the room…?"}\n'
+    )
     ]
 
     def __init__(self, check_groq_key=True):
@@ -80,11 +99,11 @@ class GroqTranslator(CommonTranslator):
 
     @property
     def temperature(self) -> float:
-        return self._config_get('temperature', default=0.5)
+        return self._config_get('temperature', default=0.2)
     
     @property
     def top_p(self) -> float:
-        return self._config_get('top_p', default=1)
+        return self._config_get('top_p', default=0.95)
 
     def _format_prompt_log(self, to_lang: str, prompt: str) -> str:
         return '\n'.join([
