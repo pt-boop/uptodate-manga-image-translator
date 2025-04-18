@@ -140,7 +140,7 @@ class GroqTranslator(CommonTranslator):
             max_tokens=self._MAX_TOKENS // 2,
             temperature=self.temperature,
             top_p=self.top_p,
-            stop=["\"}"]
+            stop=["'}"]
         )
         
         # Update token counts
