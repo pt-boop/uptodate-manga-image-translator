@@ -144,22 +144,26 @@ class GroqTranslator(CommonTranslator):
             {'role': 'system', 'content': self.chat_system_template.replace('{to_lang}', to_lang)}
         ]
 
-        # 2) API call with strict stop and usage metrics
+        # 2) API call with strict stop
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=sanity + self.messages,
             max_tokens=self._MAX_TOKENS // 2,
             temperature=self.temperature,
             top_p=self.top_p,
-            stop=["}"],       # Hard stop after JSON close‑brace
-            include_usage=True  # Request usage data
+            stop=["}"],    # Hard stop right after the JSON close‑brace
         )
 
-        # 3) Handle token usage reporting
+        # 3) Handle token usage (sum prompt+completion if total is missing)
         token_info = getattr(response, 'usage', None)
         if token_info:
-            self.token_count_last = token_info.total_tokens
-            self.token_count += token_info.total_tokens
+            prompt_t = getattr(token_info, 'prompt_tokens', 0)
+            comp_t = getattr(token_info, 'completion_tokens', 0)
+            total_t = getattr(token_info, 'total_tokens', None)
+            if not total_t:
+                total_t = prompt_t + comp_t
+            self.token_count_last = total_t
+            self.token_count += total_t
         else:
             # Fallback to at least 1 token
             self.token_count_last = 1
@@ -173,7 +177,7 @@ class GroqTranslator(CommonTranslator):
         if "{" in content:
             content = content[content.index("{"):]
 
-        # 6) Clean up the response as before
+        # 6) Clean up the response exactly as before
         cleaned_content = (
             content
             .replace("{'translated':'", '')
@@ -183,7 +187,7 @@ class GroqTranslator(CommonTranslator):
             .strip("'{}")
         )
 
-        # 7) Restore your message buffer for context retention
+        # 7) Restore message buffer for context retention
         self.messages = self.messages[:-1]
         if self._CONTEXT_RETENTION:
             self.messages += [{'role': 'assistant', 'content': content}]
