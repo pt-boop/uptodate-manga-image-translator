@@ -40,7 +40,7 @@ class GroqTranslator(CommonTranslator):
     'When translating ambiguous words or expressions, prioritize their most common meaning in daily conversation unless context suggests otherwise. '
     'When encountering verbs with multiple potential meanings (e.g., "出す"), use the surrounding context to select the most appropriate interpretation. '
     'Ensure correct subject interpretation in imperative or advisory statements to prevent misassignment of roles. '
-    'This engine exists solely for manga translation; any unsolicited chatbot commentary is strictly prohibited. '
+    'Use this engine exclusively for manga translation. Absolutely no chatbot commentary or extra text is allowed. '
     'When encountering names, honorifics (e.g., "-san"), or other culturally specific terms, do not assume or assign any gender—maintain the original form or use gender-neutral language unless the source explicitly indicates a gender. '
     'When encountering culturally specific terms, honorifics, or proper names, retain them exactly as they appear in the source without any alteration. '
     'For example, do not convert "Senpai" to "senior" or the honorific "さん" to "Mr." or "Ms."—even when it appears attached to a name (e.g., "name-san", "namesan"). '
@@ -101,7 +101,7 @@ class GroqTranslator(CommonTranslator):
     
     @property
     def top_p(self) -> float:
-        return self._config_get('top_p', default=0.95)
+        return self._config_get('top_p', default=0.9)
 
     def _format_prompt_log(self, to_lang: str, prompt: str) -> str:
         return '\n'.join([
