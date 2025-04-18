@@ -126,7 +126,7 @@ class GroqTranslator(CommonTranslator):
         return translations
 
     async def _request_translation(self, to_lang: str, prompt: str) -> str:
-        # 1) Build the user/system messages as before…
+        # 1) Build the user/system messages
         prompt_with_lang = (
             f"Translate the following text into {to_lang}. "
             "Return the result in JSON format.\n\n"
@@ -144,43 +144,39 @@ class GroqTranslator(CommonTranslator):
              'content': self.chat_system_template.replace('{to_lang}', to_lang)}
         ]
 
-        # 2) HERE: change stop from ["'}"] to ["}"]
+        # 2) API call with strict stop sequence
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=sanity + self.messages,
             max_tokens=self._MAX_TOKENS // 2,
             temperature=self.temperature,
             top_p=self.top_p,
-            stop=["}"]    # ← HARD stop right after the closing brace
+            stop=["}"]    # ← Hard stop right after the JSON close‐brace
         )
 
-        # 3) Extract the raw content
+        # 3) Extract raw content
         content = response.choices[0].message.content.strip()
-        # We don’t want that “->” or any extra logs, so we’re going to parse it
 
-        # ───────────────────────────────────────────────────────────────────
-        # 4) NEW BLOCK: strict JSON parsing + regex fallback
-        import json, re
-        try:
-            # Try to parse the entire thing as JSON
-            data = json.loads(content)
-            translation_text = data["translated"].strip()
-        except (json.JSONDecodeError, KeyError):
-            # Fallback in case it isn’t perfectly JSON
-            m = re.search(r'\{\s*"translated"\s*:\s*"(.+?)"\s*\}', content)
-            if m:
-                translation_text = m.group(1)
-            else:
-                # If all else fails, raise an error (or handle as you like)
-                raise ValueError(f"Invalid translator output: {content!r}")
-        # ───────────────────────────────────────────────────────────────────
+        # 4) Strip off anything before the first JSON brace
+        if "{" in content:
+            content = content[content.index("{"):]
 
-        # 5) Restore your message buffer (as you did before)
+        # 5) Clean up the response (your original logic)
+        cleaned_content = (
+            content
+            .replace("{'translated':'", '')
+            .replace('}', '')
+            .replace("\\'", "'")
+            .replace('\\"', '"')
+            .strip("'{}")
+        )
+
+        # 6) Restore message buffer for context retention
         self.messages = self.messages[:-1]
         if self._CONTEXT_RETENTION:
             self.messages += [{'role': 'assistant', 'content': content}]
         else:
             self.messages = self.messages[:-1]
 
-        # 6) RETURN only the clean translation string
-        return translation_text
+        # 7) Return only the clean translation text
+        return cleaned_content
