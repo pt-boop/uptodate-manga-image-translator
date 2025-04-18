@@ -128,40 +128,52 @@ class GroqTranslator(CommonTranslator):
     async def _request_translation(self, to_lang: str, prompt: str) -> str:
         # 1) Build the user/system messages
         prompt_with_lang = (
-            f"Translate the following text into {to_lang}. "
-            "Return the result in JSON format.\n\n"
+            f"Translate the following text into {to_lang}. Return the result in JSON format.\n\n"
             f'{{"untranslated": "{prompt}"}}\n'
         )
         self.messages += [
             {'role': 'user', 'content': prompt_with_lang},
             {'role': 'assistant', 'content': "{'translated':'"}
         ]
+        # Trim context if too long
         if len(self.messages) > self._MAX_CONTEXT:
             self.messages = self.messages[-self._MAX_CONTEXT:]
 
+        # System prompt
         sanity = [
-            {'role': 'system',
-             'content': self.chat_system_template.replace('{to_lang}', to_lang)}
+            {'role': 'system', 'content': self.chat_system_template.replace('{to_lang}', to_lang)}
         ]
 
-        # 2) API call with strict stop sequence
+        # 2) API call with strict stop and usage metrics
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=sanity + self.messages,
             max_tokens=self._MAX_TOKENS // 2,
             temperature=self.temperature,
             top_p=self.top_p,
-            stop=["}"]    # ← Hard stop right after the JSON close‐brace
+            stop=["}"],       # Hard stop after JSON close‑brace
+            include_usage=True  # Request usage data
         )
 
-        # 3) Extract raw content
+        # 3) Handle token usage reporting
+        token_info = getattr(response, 'usage', None)
+        if token_info:
+            self.token_count_last = token_info.total_tokens
+            self.token_count += token_info.total_tokens
+        else:
+            # Fallback to at least 1 token
+            self.token_count_last = 1
+            self.token_count += 1
+        self.logger.info(f'Used {self.token_count_last} tokens (Total: {self.token_count})')
+
+        # 4) Extract raw content
         content = response.choices[0].message.content.strip()
 
-        # 4) Strip off anything before the first JSON brace
+        # 5) Strip off any prefix before the first JSON brace
         if "{" in content:
             content = content[content.index("{"):]
 
-        # 5) Clean up the response (your original logic)
+        # 6) Clean up the response as before
         cleaned_content = (
             content
             .replace("{'translated':'", '')
@@ -171,12 +183,12 @@ class GroqTranslator(CommonTranslator):
             .strip("'{}")
         )
 
-        # 6) Restore message buffer for context retention
+        # 7) Restore your message buffer for context retention
         self.messages = self.messages[:-1]
         if self._CONTEXT_RETENTION:
             self.messages += [{'role': 'assistant', 'content': content}]
         else:
             self.messages = self.messages[:-1]
 
-        # 7) Return only the clean translation text
+        # 8) Return only the clean translation text
         return cleaned_content
