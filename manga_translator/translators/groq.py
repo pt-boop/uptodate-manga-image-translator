@@ -126,45 +126,61 @@ class GroqTranslator(CommonTranslator):
         return translations
 
     async def _request_translation(self, to_lang: str, prompt: str) -> str:
-        # Prepare the prompt with language specification
-        prompt_with_lang = f"""Translate the following text into {to_lang}. Return the result in JSON format.\n\n{{"untranslated": "{prompt}"}}\n"""
+        # 1) Build the user/system messages as before…
+        prompt_with_lang = (
+            f"Translate the following text into {to_lang}. "
+            "Return the result in JSON format.\n\n"
+            f'{{"untranslated": "{prompt}"}}\n'
+        )
         self.messages += [
             {'role': 'user', 'content': prompt_with_lang},
             {'role': 'assistant', 'content': "{'translated':'"}
         ]
-        # Maintain the context window
         if len(self.messages) > self._MAX_CONTEXT:
             self.messages = self.messages[-self._MAX_CONTEXT:]
 
-        # Prepare the system message
-        sanity = [{'role': 'system', 'content': self.chat_system_template.replace('{to_lang}', to_lang)}]
-        
-        # Make the API call
+        sanity = [
+            {'role': 'system',
+             'content': self.chat_system_template.replace('{to_lang}', to_lang)}
+        ]
+
+        # 2) HERE: change stop from ["'}"] to ["}"]
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=sanity + self.messages,
             max_tokens=self._MAX_TOKENS // 2,
             temperature=self.temperature,
             top_p=self.top_p,
-            stop=["'}"]
+            stop=["}"]    # ← HARD stop right after the closing brace
         )
-        
-        # Update token counts
-        self.token_count += response.usage.total_tokens
-        self.token_count_last = response.usage.total_tokens
-        
-        # Extract and clean the content
+
+        # 3) Extract the raw content
         content = response.choices[0].message.content.strip()
+        # We don’t want that “->” or any extra logs, so we’re going to parse it
+
+        # ───────────────────────────────────────────────────────────────────
+        # 4) NEW BLOCK: strict JSON parsing + regex fallback
+        import json, re
+        try:
+            # Try to parse the entire thing as JSON
+            data = json.loads(content)
+            translation_text = data["translated"].strip()
+        except (json.JSONDecodeError, KeyError):
+            # Fallback in case it isn’t perfectly JSON
+            m = re.search(r'\{\s*"translated"\s*:\s*"(.+?)"\s*\}', content)
+            if m:
+                translation_text = m.group(1)
+            else:
+                # If all else fails, raise an error (or handle as you like)
+                raise ValueError(f"Invalid translator output: {content!r}")
+        # ───────────────────────────────────────────────────────────────────
+
+        # 5) Restore your message buffer (as you did before)
         self.messages = self.messages[:-1]
-        
-        # Handle context retention
         if self._CONTEXT_RETENTION:
-            self.messages += [
-                {'role': 'assistant', 'content': content}
-            ]
+            self.messages += [{'role': 'assistant', 'content': content}]
         else:
             self.messages = self.messages[:-1]
-            
-        # Clean up the response
-        cleaned_content = content.replace("{'translated':'", '').replace('}', '').replace("\\'", "'").replace("\\\"", "\"").strip("'{}")
-        return cleaned_content
+
+        # 6) RETURN only the clean translation string
+        return translation_text
