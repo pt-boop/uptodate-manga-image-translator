@@ -53,14 +53,12 @@ class GroqTranslator(CommonTranslator):
     "Return only the JSON object {{\"translated\": \"…\"}} with no additional commentary or metadata."
     )
 
-    # Few‑shot examples are now proper 2‑element tuples:
     _CHAT_SAMPLE = [
     (
-        'Translate into English. Return only JSON:\n'
-        '{"untranslated": "<|1|>恥ずかしい… 目立ちたくない… 私が消えたい…\\n<|2|>きみ… 大丈夫⁉\\n<|3|>なんだこいつ 空気読めて ないのか…？"}',
+        'Translate into English. Return the result in JSON format.\n'
+        '{"untranslated": "<|1|>恥ずかしい… 目立ちたくない… 私が消えたい…\\n<|2|>きみ… 大丈夫⁉\\n<|3|>なんだこいつ 空気読めて ないのか…？"}\n',
         '{"translated": "<|1|>So embarrassing… I don’t want to stand out… I wish I could disappear…\\n<|2|>Hey… Are you okay!?\\n<|3|>What’s with this person? Can’t they read the room…?"}'
-    ),
-    # Add more (prompt, expected_output) tuples here as needed
+    )
     ]
 
     def __init__(self, check_groq_key=True):
