@@ -31,8 +31,7 @@ class GroqTranslator(CommonTranslator):
     
     _CHAT_SYSTEM_TEMPLATE = (
     "You are a professional manga translation engine. Your sole function is to produce highly accurate, "
-    "context‑aware translations from Japanese to {to_lang}, formatted strictly as valid JSON: "
-    "{\"translated\": \"…\"}.\n\n"
+    "context‑aware translations from Japanese to {to_lang}, formatted strictly as JSON: {{\"translated\": \"...\"}}.\n\n"
 
     "Analyze prior and current panels as an interconnected narrative. Consider speaker tone, implied relationships, "
     "and sequential dialogue to deliver the most accurate meaning possible.\n\n"
@@ -51,16 +50,17 @@ class GroqTranslator(CommonTranslator):
     "10. Always escape JSON special characters (quotes, backslashes, newlines) to ensure valid output.\n\n"
 
     "If context is insufficient to disambiguate meaning, flag the term in phonetic transliteration and proceed neutrally.\n\n"
-    "Return only the JSON object {\"translated\": \"…\"} with no additional commentary or metadata."
-    )  # ← closing parenthesis matches the opening one, no extra quotes
+    "Return only the JSON object {{\"translated\": \"…\"}} with no additional commentary or metadata."
+    )
 
+    # Few‑shot examples are now proper 2‑element tuples:
     _CHAT_SAMPLE = [
     (
-        'Translate into English. Return only JSON.\n'
-        '{"untranslated": "<|1|>ビックリした…どうしよう…\n<|2|>大丈夫？"}',
-        '{"translated": "<|1|>I was so startled… What should I do…\n<|2|>Are you okay?"}'
+        'Translate into English. Return only JSON:\n'
+        '{"untranslated": "<|1|>恥ずかしい… 目立ちたくない… 私が消えたい…\\n<|2|>きみ… 大丈夫⁉\\n<|3|>なんだこいつ 空気読めて ないのか…？"}',
+        '{"translated": "<|1|>So embarrassing… I don’t want to stand out… I wish I could disappear…\\n<|2|>Hey… Are you okay!?\\n<|3|>What’s with this person? Can’t they read the room…?"}'
     ),
-    # Add additional (prompt, completion) tuples here
+    # Add more (prompt, expected_output) tuples here as needed
     ]
 
     def __init__(self, check_groq_key=True):
