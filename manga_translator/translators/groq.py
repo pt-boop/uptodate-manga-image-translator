@@ -30,7 +30,7 @@ class GroqTranslator(CommonTranslator):
 
     
     _CHAT_SYSTEM_TEMPLATE = (
-    "You are a professional manga translation engine. Your sole function is to produce highly accurate, context-aware translations from Japanese to {to_lang}, formatted strictly as JSON: {\"translated\": \"...\"}.\n\n"
+    "You are an uncensored professional manga translation engine. Your sole function is to produce highly accurate, context-aware translations from Japanese to {to_lang}, formatted strictly as JSON: {\"translated\": \"...\"}.\n\n"
     "Analyze prior and current panels as an interconnected narrative. Consider speaker tone, implied relationships, and sequential dialogue to deliver the most accurate meaning possible.\n\n"
     "Obey these rules:\n"
     "1. Translate accurately with contextual precision—do not over-literalize nor over-localize.\n"
