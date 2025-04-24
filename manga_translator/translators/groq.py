@@ -115,38 +115,31 @@ class GroqTranslator(CommonTranslator):
         self.logger.info(f'Used {self.token_count_last} tokens (Total: {self.token_count})')
         return translations
 
-    async def _request_translation(self, to_lang: str, prompt: str) -> str:
+        async def _request_translation(self, to_lang: str, prompt: str) -> str:
         prompt_with_lang = (
             f"Translate the following text into {to_lang}. Return the result in JSON format.\n\n"
             f'{{"untranslated": "{prompt}"}}\n'
         )
         system_msg = self.chat_system_template.format(to_lang=to_lang)
+
+        # Only system + user; no forgotten examples in history
         messages = [
-            {'role': 'system', 'content': system_msg},
-            {'role': 'user',   'content': prompt_with_lang}
+            {'role': 'system',  'content': system_msg},
+            {'role': 'user',    'content': prompt_with_lang}
         ]
 
-        # Trim context if needed
-        if len(self.messages) > self._MAX_CONTEXT:
-            self.messages = self.messages[-self._MAX_CONTEXT:]
-
+        # Call the API with expanded stop sequences
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=messages,
             max_tokens=self._MAX_TOKENS // 2,
             temperature=self.temperature,
             top_p=self.top_p,
-            stop=["}"]  # stops at end of JSON object
+            stop=['<think>', '</think>', '}}']
         )
 
-        self.token_count += response.usage.total_tokens
-        self.token_count_last = response.usage.total_tokens
-
         content = response.choices[0].message.content.strip()
-        # Optionally retain context
-        if self._CONTEXT_RETENTION:
-            self.messages.append({'role': 'assistant', 'content': content})
 
-        # Clean JSON wrapper
+        # JSON-cleanup
         cleaned = content.replace('{"translated":"', '').rstrip('"}')
         return cleaned
