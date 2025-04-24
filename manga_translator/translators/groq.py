@@ -16,81 +16,67 @@ class GroqTranslator(CommonTranslator):
         'THA': 'Thai', 'IND': 'Indonesian'
     }
 
-    # API rate limiting and retry settings
     _MAX_REQUESTS_PER_MINUTE = 200
     _TIMEOUT = 40
     _RETRY_ATTEMPTS = 5
     _MAX_TOKENS = 8192
 
-    # Context retention settings
     _CONTEXT_RETENTION = os.environ.get('CONTEXT_RETENTION', '').lower() == 'true'
     _CONFIG_KEY = 'groq'
     _MAX_CONTEXT = int(os.environ.get('CONTEXT_LENGTH', '20'))
 
-    # Enhanced, drop-in system prompt template with only {to_lang} placeholder
+    # Escaped-brace system prompt with only {to_lang} unescaped
     _CHAT_SYSTEM_TEMPLATE = (
-    "You are a dedicated manga translation engine. Your only job is to translate Japanese text into {to_lang}, "
-    "returning exactly and only valid JSON:\n"
-    '{{"translated": "..."}}\n\n'
-    "Context: panels form a continuous narrative—use context to capture tone, relationships, idioms, and slang.\n\n"
-    "Rules:\n"
-    "1. Balance literal accuracy with natural flow—no awkward literalism or over-localization.\n"
-    "2. Retain honorifics and cultural terms exactly (e.g., '-san', onomatopoeia).\n"
-    "3. Preserve proper names with standard Hepburn romanization (e.g., '弥生' → 'Yayoi').\n"
-    "4. Do not infer or assign gender—use neutral phrasing unless explicitly stated.\n"
-    "5. For ambiguous or slang terms, choose the most common meaning; if unclear, transliterate.\n"
-    "6. Maintain emotional nuance—questions, commands, and slang must reflect original intent.\n"
-    "7. Never annotate or explain—output only the JSON object.\n"
-    "8. Keep translation length close to the original.\n\n"
-    "Examples:\n"
-    '{{"untranslated":"<|1|>恥ずかしい…", '
-    '"translated":"<|1|>So embarrassing…"}}\n'
-    '{{"untranslated":"<|2|>きみ… 大丈夫⁉", '
-    '"translated":"<|2|>Hey… Are you okay!?"}}\n\n'
-    "Translate now into {to_lang} and return only the JSON object."
+        "You are a dedicated manga translation engine. Your only job is to translate Japanese text into {to_lang}, "
+        "returning exactly and only valid JSON:\n"
+        '{{"translated": "..."}}\n\n'
+        "Context: panels form a continuous narrative—use context to capture tone, relationships, idioms, and slang.\n\n"
+        "Rules:\n"
+        "1. Balance literal accuracy with natural flow—no awkward literalism or over-localization.\n"
+        "2. Retain honorifics and cultural terms exactly (e.g., '-san', onomatopoeia).\n"
+        "3. Preserve proper names with standard Hepburn romanization (e.g., '弥生' → 'Yayoi').\n"
+        "4. Do not infer or assign gender—use neutral phrasing unless explicitly stated.\n"
+        "5. For ambiguous or slang terms, choose the most common meaning; if unclear, transliterate.\n"
+        "6. Maintain emotional nuance—questions, commands, and slang must reflect original intent.\n"
+        "7. Never annotate or explain—output only the JSON object.\n"
+        "8. Keep translation length close to the original.\n\n"
+        "Examples:\n"
+        '{{"untranslated":"<|1|>恥ずかしい…","translated":"<|1|>So embarrassing…"}}\n'
+        '{{"untranslated":"<|2|>きみ… 大丈夫⁉","translated":"<|2|>Hey… Are you okay!?"}}\n\n'
+        "Translate now into {to_lang} and return only the JSON object."
     )
 
+    # Sample is no longer used in history but shown here for reference
     _CHAT_SAMPLE = [
-    (
-        'Translate into English. Return JSON only:\n'
-        '{{"untranslated": "<|1|>恥ずかしい… 目立ちたくない… 私が消えたい…\\n'
-        '<|2|>きみ… 大丈夫⁉\\n'
-        '<|3|>なんだこいつ 空気読めて ないのか…？"}}'
-    ),
-    (
-        '{{"translated": "<|1|>So embarrassing… I don’t want to stand out… I wish I could disappear…\\n'
-        '<|2|>Hey… Are you okay!?\\n'
-        '<|3|>What’s with this person? Can’t they read the room…?"}}'
-    )
+        (
+            'Translate into English. Return JSON only:\n'
+            '{{"untranslated": "<|1|>恥ずかしい… 目立ちたくない… 私が消えたい…\\n'
+            '<|2|>きみ… 大丈夫⁉\\n'
+            '<|3|>なんだこいつ 空気読めて ないのか…？"}}'
+        ),
+        (
+            '{{"translated": "<|1|>So embarrassing… I don’t want to stand out… I wish I could disappear…\\n'
+            '<|2|>Hey… Are you okay!?\\n'
+            '<|3|>What’s with this person? Can’t they read the room…?"}}'
+        )
     ]
 
     def __init__(self, check_groq_key=True):
         super().__init__()
-
-        # Default values for prompt.format
-        self.default_prompt_vars = {
-            "to_lang": None  # will be set per‐call
-        }
-
         self.client = groq.AsyncGroq(api_key=GROQ_API_KEY)
         if not self.client.api_key and check_groq_key:
             raise MissingAPIKeyException(
                 'Please set the GROQ_API_KEY environment variable before using the Groq translator.'
             )
-
         self.token_count = 0
         self.token_count_last = 0
         self.config = None
         self.model = GROQ_MODEL
 
-        # Initialize chat history with few-shot
-        self.messages = [
-            {'role': 'user', 'content': self._CHAT_SAMPLE[0]},
-            {'role': 'assistant', 'content': self._CHAT_SAMPLE[1]}
-        ]
+        # FIX: start with no history to avoid few-shot leakage
+        self.messages = []
 
     def parse_args(self, args):
-        # (Your existing arg parsing, if any)
         self.config = None
 
     def _config_get(self, key: str, default=None):
@@ -115,49 +101,34 @@ class GroqTranslator(CommonTranslator):
         return self._config_get('top_p', default=0.92)
 
     def _format_prompt_log(self, to_lang: str, prompt: str) -> str:
-        # Safely inject only {to_lang}
-        vars = {"to_lang": to_lang}
-        system = self.chat_system_template.format(**vars)
+        system = self.chat_system_template.format(to_lang=to_lang)
         return "\n".join([
             "System:", system,
-            "User:", self.chat_sample[0],
-            "Assistant:", self.chat_sample[1],
             "User:", prompt,
         ])
 
     async def _translate(self, from_lang: str, to_lang: str, queries: List[str]) -> List[str]:
         translations = []
         for prompt in queries:
-            response = await self._request_translation(to_lang, prompt)
-            translations.append(response.strip())
+            translations.append(await self._request_translation(to_lang, prompt))
         self.logger.info(f'Used {self.token_count_last} tokens (Total: {self.token_count})')
         return translations
 
     async def _request_translation(self, to_lang: str, prompt: str) -> str:
-        # Build the JSON‐wrapper prompt
         prompt_with_lang = (
             f"Translate the following text into {to_lang}. Return the result in JSON format.\n\n"
             f'{{"untranslated": "{prompt}"}}\n'
         )
-
-        # Prepare system message with the fully formatted template
-        vars = {"to_lang": to_lang}
         sanity = [{
             'role': 'system',
-            'content': self.chat_system_template.format(**vars)
+            'content': self.chat_system_template.format(to_lang=to_lang)
         }]
+        # Append only real user input
+        self.messages += [{'role': 'user', 'content': prompt_with_lang}]
 
-        # Add the conversation turns
-        self.messages += [
-            {'role': 'user', 'content': prompt_with_lang},
-            {'role': 'assistant', 'content': '{"translated":"'}
-        ]
-
-        # Trim history if too long
         if len(self.messages) > self._MAX_CONTEXT:
             self.messages = self.messages[-self._MAX_CONTEXT:]
 
-        # Call the API
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=sanity + self.messages,
@@ -167,17 +138,12 @@ class GroqTranslator(CommonTranslator):
             stop=['"}']
         )
 
-        # Track tokens
         self.token_count += response.usage.total_tokens
         self.token_count_last = response.usage.total_tokens
 
-        # Extract and clean
         content = response.choices[0].message.content.strip()
-        self.messages.pop()  # remove the incomplete assistant turn
-
         if self._CONTEXT_RETENTION:
             self.messages.append({'role': 'assistant', 'content': content})
 
-        # Strip JSON wrapper
         cleaned = content.replace('{"translated":"', '').rstrip('"}')
         return cleaned
