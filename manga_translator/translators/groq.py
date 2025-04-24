@@ -116,28 +116,28 @@ class GroqTranslator(CommonTranslator):
         return translations
 
     async def _request_translation(self, to_lang: str, prompt: str) -> str:
-    prompt_with_lang = (
+        prompt_with_lang = (
         f"Translate the following text into {to_lang}. Return the result in JSON format.\n\n"
         f'{{"untranslated": "{prompt}"}}\n'
-    )
-    system_msg = self.chat_system_template.format(to_lang=to_lang)
+        )
+        system_msg = self.chat_system_template.format(to_lang=to_lang)
 
     # Build messages with a partial assistant turn
-    messages = [
+        messages = [
         {'role':'system',    'content': system_msg},
         {'role':'user',      'content': prompt_with_lang},
         {'role':'assistant', 'content': '{"translated":"'}
-    ]
+        ]
 
-    response = await self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
         model=self.model,
         messages=messages,
         max_tokens=self._MAX_TOKENS // 2,
         temperature=self.temperature,
         top_p=self.top_p,
         stop=['<think>', '"}']    # stop after closing the JSON value
-    )
+        )
 
-    text = response.choices[0].message.content
+        text = response.choices[0].message.content
     # text now contains only the translation, e.g. So embarrassing… etc.
-    return text.strip()
+        return text.strip()
