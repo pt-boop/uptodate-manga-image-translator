@@ -25,11 +25,11 @@ class GroqTranslator(CommonTranslator):
     _CONFIG_KEY = 'groq'
     _MAX_CONTEXT = int(os.environ.get('CONTEXT_LENGTH', '20'))
 
-    # Escaped-brace system prompt with only {to_lang} unescaped
+    # Updated system prompt: escaped braces, single {to_lang}, no chain-of-thought
     _CHAT_SYSTEM_TEMPLATE = (
-        "You are a dedicated manga translation engine. Your only job is to translate Japanese text into {to_lang}, "
-        "returning exactly and only valid JSON:\n"
-        '{{"translated": "..."}}\n\n'
+        "You are a dedicated manga translation engine. Your only job is to translate"
+        " Japanese text into {to_lang}, returning exactly and only valid JSON:\n"
+        "{{\"translated\": \"...\"}}\n\n"
         "Context: panels form a continuous narrative—use context to capture tone, relationships, idioms, and slang.\n\n"
         "Rules:\n"
         "1. Balance literal accuracy with natural flow—no awkward literalism or over-localization.\n"
@@ -38,26 +38,27 @@ class GroqTranslator(CommonTranslator):
         "4. Do not infer or assign gender—use neutral phrasing unless explicitly stated.\n"
         "5. For ambiguous or slang terms, choose the most common meaning; if unclear, transliterate.\n"
         "6. Maintain emotional nuance—questions, commands, and slang must reflect original intent.\n"
-        "7. Never annotate or explain—output only the JSON object.\n"
-        "8. Keep translation length close to the original.\n\n"
+        "7. Never annotate, explain, or reveal internal reasoning or chain-of-thought.\n"
+        "8. Do not output any '<think>' tags or reasoning. Provide only the JSON object.\n"
+        "9. Keep translation length close to the original.\n\n"
         "Examples:\n"
-        '{{"untranslated":"<|1|>恥ずかしい…","translated":"<|1|>So embarrassing…"}}\n'
-        '{{"untranslated":"<|2|>きみ… 大丈夫⁉","translated":"<|2|>Hey… Are you okay!?"}}\n\n'
+        "{{\"untranslated\":\"<|1|>恥ずかしい…\",\n  \"translated\":\"<|1|>So embarrassing…\"}}\n"
+        "{{\"untranslated\":\"<|2|>きみ… 大丈夫⁉\",\n  \"translated\":\"<|2|>Hey… Are you okay!?\"}}\n\n"
         "Translate now into {to_lang} and return only the JSON object."
     )
 
-    # Sample is no longer used in history but shown here for reference
+    # Sample reference (not used in history)
     _CHAT_SAMPLE = [
         (
             'Translate into English. Return JSON only:\n'
-            '{{"untranslated": "<|1|>恥ずかしい… 目立ちたくない… 私が消えたい…\\n'
+            '{{\"untranslated\": \"<|1|>恥ずかしい… 目立ちたくない… 私が消えたい…\\n'
             '<|2|>きみ… 大丈夫⁉\\n'
-            '<|3|>なんだこいつ 空気読めて ないのか…？"}}'
+            '<|3|>なんだこいつ 空気読めて ないのか…？}}'
         ),
         (
-            '{{"translated": "<|1|>So embarrassing… I don’t want to stand out… I wish I could disappear…\\n'
+            '{{\"translated\": \"<|1|>So embarrassing… I don’t want to stand out… I wish I could disappear…\\n'
             '<|2|>Hey… Are you okay!?\\n'
-            '<|3|>What’s with this person? Can’t they read the room…?"}}'
+            '<|3|>What’s with this person? Can’t they read the room…?\"}}'
         )
     ]
 
@@ -73,7 +74,7 @@ class GroqTranslator(CommonTranslator):
         self.config = None
         self.model = GROQ_MODEL
 
-        # FIX: start with no history to avoid few-shot leakage
+        # FIX: clear initial history to prevent example leakage
         self.messages = []
 
     def parse_args(self, args):
@@ -119,31 +120,33 @@ class GroqTranslator(CommonTranslator):
             f"Translate the following text into {to_lang}. Return the result in JSON format.\n\n"
             f'{{"untranslated": "{prompt}"}}\n'
         )
-        sanity = [{
-            'role': 'system',
-            'content': self.chat_system_template.format(to_lang=to_lang)
-        }]
-        # Append only real user input
-        self.messages += [{'role': 'user', 'content': prompt_with_lang}]
+        system_msg = self.chat_system_template.format(to_lang=to_lang)
+        messages = [
+            {'role': 'system', 'content': system_msg},
+            {'role': 'user',   'content': prompt_with_lang}
+        ]
 
+        # Trim context if needed
         if len(self.messages) > self._MAX_CONTEXT:
             self.messages = self.messages[-self._MAX_CONTEXT:]
 
         response = await self.client.chat.completions.create(
             model=self.model,
-            messages=sanity + self.messages,
+            messages=messages,
             max_tokens=self._MAX_TOKENS // 2,
             temperature=self.temperature,
             top_p=self.top_p,
-            stop=['"}']
+            stop=["}"]  # stops at end of JSON object
         )
 
         self.token_count += response.usage.total_tokens
         self.token_count_last = response.usage.total_tokens
 
         content = response.choices[0].message.content.strip()
+        # Optionally retain context
         if self._CONTEXT_RETENTION:
             self.messages.append({'role': 'assistant', 'content': content})
 
+        # Clean JSON wrapper
         cleaned = content.replace('{"translated":"', '').rstrip('"}')
         return cleaned
