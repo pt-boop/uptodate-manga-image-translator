@@ -29,40 +29,39 @@ class GroqTranslator(CommonTranslator):
 
     # Enhanced, drop-in system prompt template with only {to_lang} placeholder
     _CHAT_SYSTEM_TEMPLATE = (
-        "You are a dedicated manga translation engine. Your only job is to translate Japanese text into {to_lang}, "
-        "returning exactly and only valid JSON:\n"
-        '{"translated": "..."}\n\n'
-        "Context: panels form a continuous narrative—use context to capture tone, relationships, idioms, and slang.\n\n"
-        "Rules:\n"
-        "1. Balance literal accuracy with natural flow—no awkward literalism or over-localization.\n"
-        "2. Retain honorifics and cultural terms exactly (e.g., '-san', onomatopoeia).\n"
-        "3. Preserve proper names with standard Hepburn romanization (e.g., '弥生' → 'Yayoi').\n"
-        "4. Do not infer or assign gender—use neutral phrasing unless explicitly stated.\n"
-        "5. For ambiguous or slang terms, choose the most common meaning; if unclear, transliterate.\n"
-        "6. Maintain emotional nuance—questions, commands, and slang must reflect original intent.\n"
-        "7. Never annotate or explain—output only the JSON object.\n"
-        "8. Keep translation length close to the original.\n\n"
-        "Examples:\n"
-        '{"untranslated":"<|1|>恥ずかしい…", '
-        '"translated":"<|1|>So embarrassing…"}\n'
-        '{"untranslated":"<|2|>きみ… 大丈夫⁉", '
-        '"translated":"<|2|>Hey… Are you okay!?"}\n\n'
-        "Translate now into {to_lang} and return only the JSON object."
+    "You are a dedicated manga translation engine. Your only job is to translate Japanese text into {to_lang}, "
+    "returning exactly and only valid JSON:\n"
+    '{{"translated": "..."}}\n\n'
+    "Context: panels form a continuous narrative—use context to capture tone, relationships, idioms, and slang.\n\n"
+    "Rules:\n"
+    "1. Balance literal accuracy with natural flow—no awkward literalism or over-localization.\n"
+    "2. Retain honorifics and cultural terms exactly (e.g., '-san', onomatopoeia).\n"
+    "3. Preserve proper names with standard Hepburn romanization (e.g., '弥生' → 'Yayoi').\n"
+    "4. Do not infer or assign gender—use neutral phrasing unless explicitly stated.\n"
+    "5. For ambiguous or slang terms, choose the most common meaning; if unclear, transliterate.\n"
+    "6. Maintain emotional nuance—questions, commands, and slang must reflect original intent.\n"
+    "7. Never annotate or explain—output only the JSON object.\n"
+    "8. Keep translation length close to the original.\n\n"
+    "Examples:\n"
+    '{{"untranslated":"<|1|>恥ずかしい…", '
+    '"translated":"<|1|>So embarrassing…"}}\n'
+    '{{"untranslated":"<|2|>きみ… 大丈夫⁉", '
+    '"translated":"<|2|>Hey… Are you okay!?"}}\n\n'
+    "Translate now into {to_lang} and return only the JSON object."
     )
 
-    # Few-shot samples for the chat history
     _CHAT_SAMPLE = [
-        (
-            'Translate into English. Return JSON only:\n'
-            '{"untranslated": "<|1|>恥ずかしい… 目立ちたくない… 私が消えたい…\\n'
-            '<|2|>きみ… 大丈夫⁉\\n'
-            '<|3|>なんだこいつ 空気読めて ないのか…？"}'
-        ),
-        (
-            '{"translated": "<|1|>So embarrassing… I don’t want to stand out… I wish I could disappear…\\n'
-            '<|2|>Hey… Are you okay!?\\n'
-            '<|3|>What’s with this person? Can’t they read the room…?"}'
-        )
+    (
+        'Translate into English. Return JSON only:\n'
+        '{{"untranslated": "<|1|>恥ずかしい… 目立ちたくない… 私が消えたい…\\n'
+        '<|2|>きみ… 大丈夫⁉\\n'
+        '<|3|>なんだこいつ 空気読めて ないのか…？"}}'
+    ),
+    (
+        '{{"translated": "<|1|>So embarrassing… I don’t want to stand out… I wish I could disappear…\\n'
+        '<|2|>Hey… Are you okay!?\\n'
+        '<|3|>What’s with this person? Can’t they read the room…?"}}'
+    )
     ]
 
     def __init__(self, check_groq_key=True):
