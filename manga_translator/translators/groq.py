@@ -115,7 +115,7 @@ class GroqTranslator(CommonTranslator):
         self.logger.info(f'Used {self.token_count_last} tokens (Total: {self.token_count})')
         return translations
 
-        async def _request_translation(self, to_lang: str, prompt: str) -> str:
+    async def _request_translation(self, to_lang: str, prompt: str) -> str:
         prompt_with_lang = (
             f"Translate the following text into {to_lang}. Return the result in JSON format.\n\n"
             f'{{"untranslated": "{prompt}"}}\n'
