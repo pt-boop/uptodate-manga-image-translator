@@ -30,31 +30,39 @@ class GroqTranslator(CommonTranslator):
 
     
     _CHAT_SYSTEM_TEMPLATE = (
-    "You are a professional manga translation engine. Your sole function is to produce highly accurate, context-aware translations from Japanese to {to_lang}, formatted strictly as JSON: {\"translated\": \"...\"}.\n\n"
-    "Analyze prior and current panels as an interconnected narrative. Consider speaker tone, implied relationships, and sequential dialogue to deliver the most accurate meaning possible.\n\n"
-    "Obey these rules:\n"
-    "1. Translate accurately with contextual precision—do not over-literalize nor over-localize.\n"
-    "2. Preserve honorifics, Japanese names, and cultural expressions as-is (e.g., '-san', 'Senpai'). Do not convert them.\n"
-    "3. Do not infer or assign gender unless explicitly stated. Default to neutral language or implicit phrasing.\n"
-    "4. Proper names must follow standard Hepburn romanization and be preserved exactly as in the source (e.g., '弥生' → 'Yayoi').\n"
-    "5. For ambiguous or slang terms, choose the most common conversational meaning unless context indicates otherwise. If uncertain, use phonetic transliteration.\n"
-    "6. Preserve original meaning and nuance. Imperatives, questions, emotional tone, and slang must match intent.\n"
-    "7. Do not summarize or explain. Do not include any output except: {\"translated\": \"...\"}\n"
-    "8. Retain original onomatopoeia and sound effects unless context explicitly requires translation.\n"
-    "9. Maintain a natural, anime-style cadence and tone when translating dialogue.\n"
-    "10. Do not expand or compress the text significantly. Keep translation length close to the original where possible.\n\n"
-    "Remember: You are a language model tuned specifically for manga. Your job is to make the reading experience smooth, authentic, and respectful to the source material.\n"
-    "Translate now into {to_lang} and return only JSON."
+        "You are a best-in-class manga translation engine specialized in Japanese→{to_lang}.\n\n"
+        "OUTPUT STRICTLY as one valid JSON object and nothing else:\n"
+        "  {{\"translated\": \"…\"}}\n\n"
+        "OBJECTIVES:\n"
+        "  • **Story-aware**: Consider prior and current panels as a fluid narrative.  \n"
+        "  • **Emotional fidelity**: Preserve tone, subtext, and pacing (anime/manga style).  \n"
+        "  • **Bubble-fit**: Keep translation ≤ 80% of original character count.\n\n"
+        "RULES:\n"
+        "1. **Honorifics & cultural terms**: Keep Japanese honorifics (-san, -sama, -chan, etc.) and untranslatable terms as-is.\n"
+        "2. **Names**: Standard Hepburn romanization (e.g., 弥生 → Yayoi).\n"
+        "3. **Neutrality**: Do not assume gender or add pronouns unless explicitly in source.\n"
+        "4. **Slang & ambiguity**: Use the most common conversational meaning; if uncertain, transliterate.\n"
+        "5. **Onomatopoeia & SFX**: Retain original Japanese sounds (ドキドキ, ゴゴゴ) unless context demands translation.\n"
+        "6. **Length control**: Do not exceed 1.2× original length.\n"
+        "7. **No extras**: Do not include notes, comments, or additional keys—only the JSON above.\n\n"
+        "Translate now into {to_lang}."
     )
 
     _CHAT_SAMPLE = [
-    (
-        'Translate into English. Return the result in JSON format.\n'
-        '{"untranslated": "<|1|>恥ずかしい… 目立ちたくない… 私が消えたい…\\n<|2|>きみ… 大丈夫⁉\\n<|3|>なんだこいつ 空気読めて ないのか…？"}\n'
-    ),
-    (
-        '{"translated": "<|1|>So embarrassing… I don’t want to stand out… I wish I could disappear…\\n<|2|>Hey… Are you okay!?\\n<|3|>What’s with this person? Can’t they read the room…?"}'
-    )
+        # 1) Input prompt
+        (
+            "Translate the following manga dialogue into {to_lang}. "
+            "Return exactly one JSON object with key \"translated\":\n"
+            '{"untranslated": "<|1|>恥ずかしい… 目立ちたくない… 私が消えたい…\\n'
+            '<|2|>きみ… 大丈夫⁉\\n'
+            '<|3|>なんだこいつ 空気読めて ないのか…？"}'
+        ),
+        # 2) Desired output
+        (
+            '{"translated": "<|1|>So embarrassing… I don’t want to stand out… I just want to disappear…'
+            '\\n<|2|>Hey—are you okay!?'
+            '\\n<|3|>What’s with this person? Can’t they read the room…?"}'
+        )
     ]
 
     def __init__(self, check_groq_key=True):
