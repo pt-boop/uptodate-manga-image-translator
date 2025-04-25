@@ -131,62 +131,59 @@ class GroqTranslator(CommonTranslator):
         return translations
 
     async def _request_translation(self, to_lang: str, prompt: str) -> str:
-    # Step 4: Build prompt using the unified system template
-    system_msg = self.chat_system_template.format(to_lang=to_lang)
-    user_msg   = prompt
+        # Build prompt using the unified system template
+        system_msg = self.chat_system_template.format(to_lang=to_lang)
+        user_msg   = prompt
 
-    # Call the Groq API with strict JSON rules
-    response = await self.client.chat.completions.create(
-        model=self.model,
-        messages=[
-            {"role": "system", "content": system_msg},
-            {"role": "user",   "content": user_msg}
-        ],
-        max_tokens=self._MAX_TOKENS // 2,
-        temperature=self.temperature,
-        top_p=self.top_p,
-        # no explicit stop; template enforces pure JSON
-    )
-
-    # Update token usage counters
-    self.token_count += response.usage.total_tokens
-    self.token_count_last = response.usage.total_tokens
-
-    # Extract raw model output
-    content = response.choices[0].message.content.strip()
-
-    # Handle context retention
-    if self._CONTEXT_RETENTION:
-        self.messages.append({'role': 'assistant', 'content': content})
-    else:
-        # keep system + user only
-        self.messages = self.messages[:-1]
-
-    # Clean out the JSON wrapper
-    cleaned_content = (
-        content
-        .replace("{'translated':'", "")
-        .replace('}', "")
-        .replace("\\'", "'")
-        .replace('\\"', '"')
-        .strip("'{}")
-    )
-
-    # --- Step 3a: Bubble-fit enforcement ---
-    orig_len  = len(prompt)
-    trans_len = len(cleaned_content)
-    if trans_len > orig_len * 1.2:
-        self.logger.warning(
-            f"Translation too long ({trans_len} chars vs {orig_len*1.2:.0f} max)."
+        # Call the Groq API with strict JSON rules
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user",   "content": user_msg}
+            ],
+            max_tokens=self._MAX_TOKENS // 2,
+            temperature=self.temperature,
+            top_p=self.top_p,
         )
 
-    # --- Step 3b: JSON post-process validation ---
-    try:
-        test_obj = json.loads(f'{{"translated": "{cleaned_content}"}}')
-        if list(test_obj.keys()) != ["translated"]:
-            raise ValueError("Unexpected JSON keys")
-    except Exception as e:
-        self.logger.error(f"JSON validation failed: {e}")
-        # (Optional) you could raise or trigger a retry here
+        # Update token usage counters
+        self.token_count += response.usage.total_tokens
+        self.token_count_last = response.usage.total_tokens
 
-    return cleaned_content
+        # Extract raw model output
+        content = response.choices[0].message.content.strip()
+
+        # Handle context retention
+        if self._CONTEXT_RETENTION:
+            self.messages.append({'role': 'assistant', 'content': content})
+        else:
+            self.messages = self.messages[:-1]
+
+        # Clean out the JSON wrapper
+        cleaned_content = (
+            content
+            .replace("{'translated':'", "")
+            .replace('}', "")
+            .replace("\\'", "'")
+            .replace('\\"', '"')
+            .strip("'{}")
+        )
+
+        # Bubble-fit enforcement
+        orig_len  = len(prompt)
+        trans_len = len(cleaned_content)
+        if trans_len > orig_len * 1.2:
+            self.logger.warning(
+                f"Translation too long ({trans_len} chars vs {orig_len*1.2:.0f} max)."
+            )
+
+        # JSON post-process validation
+        try:
+            test_obj = json.loads(f'{{"translated": "{cleaned_content}"}}')
+            if list(test_obj.keys()) != ["translated"]:
+                raise ValueError("Unexpected JSON keys")
+        except Exception as e:
+            self.logger.error(f"JSON validation failed: {e}")
+
+        return cleaned_content
