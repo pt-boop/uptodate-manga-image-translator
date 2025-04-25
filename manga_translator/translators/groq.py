@@ -1,5 +1,6 @@
 import groq
 import os
+import json
 from typing import List
 
 from .common import CommonTranslator, MissingAPIKeyException
@@ -30,27 +31,40 @@ class GroqTranslator(CommonTranslator):
 
     
     _CHAT_SYSTEM_TEMPLATE = (
-        "You are a professional manga translation engine specializing in Japanese to {to_lang} translations. "
-        "Your task is to provide precise, culturally nuanced, and context-aware translations formatted strictly as JSON: "
-        "{\"translated\": \"...\"}.\n\n"
-        "Guidelines:\n"
-        "1. Maintain the original tone, style, and emotional nuance of the dialogue.\n"
-        "2. Preserve Japanese honorifics (e.g., -san, -sama) and culturally specific terms without alteration.\n"
-        "3. Use standard Hepburn romanization for proper names (e.g., '弥生' → 'Yayoi').\n"
-        "4. For ambiguous or slang terms, provide the most common conversational meaning or use phonetic transliteration if uncertain.\n"
-        "5. Retain original onomatopoeia and sound effects unless context explicitly requires translation.\n"
-        "6. Ensure the translation fits naturally within the speech bubbles, maintaining the original pacing and length.\n"
-        "7. Do not include any additional explanations or notes—output only the JSON-formatted translation.\n\n"
-        "Remember: Your goal is to deliver a translation that feels authentic and true to the original manga experience."
+        "You are a dedicated manga translation engine specializing in Japanese→{to_lang}.\n\n"
+        "Your output MUST be exactly one valid JSON object:\n"
+        "  {{\"translated\": \"…\"}}\n"
+        "and nothing else.\n\n"
+        "KEY OBJECTIVES:\n"
+        "  • Context-aware: Analyze current and prior panels as a continuous narrative.\n"
+        "  • Emotional fidelity: Preserve tone, subtext, and pacing (anime/manga style).\n"
+        "  • Bubble-fit: Keep translations concise—ideally within 80% of original character count.\n\n"
+        "RULES:\n"
+        "1. **Honorifics & cultural terms**: Keep Japanese honorifics (-san, -sama, -chan, etc.) unchanged.\n"
+        "2. **Names**: Standard Hepburn romanization (e.g., 弥生 → Yayoi).\n"
+        "3. **Neutrality**: Never assume gender or add pronouns unless explicitly in the source.\n"
+        "4. **Slang & ambiguity**: Use common meaning; if unsure, transliterate.\n"
+        "5. **Onomatopoeia & SFX**: Retain original Japanese sounds (ドキドキ, ゴゴゴ).\n"
+        "6. **Length control**: Do not exceed 1.2× original length.\n"
+        "7. **Formatting**: No extra keys or notes—output raw JSON only.\n\n"
+        "POST-PROCESS CHECK:\n"
+        "- Validate output is parseable JSON.\n"
+        "- Confirm only one object with key “translated”.\n\n"
+        "Translate now into {to_lang}."
     )
 
     _CHAT_SAMPLE = [
         (
-            "Translate the following manga dialogue into {to_lang}. Return the result in JSON format.\n"
-            '{"untranslated": "<|1|>恥ずかしい… 目立ちたくない… 私が消えたい…\\n<|2|>きみ… 大丈夫⁉\\n<|3|>なんだこいつ 空気読めて ないのか…？"}\n'
+            "Translate the following manga dialogue into {to_lang}.\n"
+            "Return exactly one JSON object with key \"translated\":\n"
+            '{"untranslated": "<|1|>恥ずかしい… 目立ちたくない… 私が消えたい…\\n'
+            '<|2|>きみ… 大丈夫⁉\\n'
+            '<|3|>なんだこいつ 空気読めて ないのか…？"}'
         ),
         (
-            '{"translated": "<|1|>So embarrassing… I don’t want to stand out… I wish I could disappear…\\n<|2|>Hey… Are you okay!?\\n<|3|>What’s with this person? Can’t they read the room…?"}\n'
+            '{"translated": "<|1|>So embarrassing… I don’t want to stand out… I just want to vanish…'
+            '\\n<|2|>Hey—are you okay!?'
+            '\\n<|3|>What’s up with this person? Can’t they read the room…?"}'
         )
     ]
 
@@ -116,46 +130,63 @@ class GroqTranslator(CommonTranslator):
         self.logger.info(f'Used {self.token_count_last} tokens (Total: {self.token_count})')
         return translations
 
-    async def _request_translation(self, to_lang: str, prompt: str) -> str:
-        # Prepare the prompt with language specification
-        prompt_with_lang = f"""Translate the following text into {to_lang}. Return the result in JSON format.\n\n{{"untranslated": "{prompt}"}}\n"""
-        self.messages += [
-            {'role': 'user', 'content': prompt_with_lang},
-            {'role': 'assistant', 'content': "{'translated':'"}
-        ]
-        # Maintain the context window
-        if len(self.messages) > self._MAX_CONTEXT:
-            self.messages = self.messages[-self._MAX_CONTEXT:]
+async def _request_translation(self, to_lang: str, prompt: str) -> str:
+    # Step 4: Build prompt using the unified system template
+    system_msg = self.chat_system_template.format(to_lang=to_lang)
+    user_msg   = prompt
 
-        # Prepare the system message
-        sanity = [{'role': 'system', 'content': self.chat_system_template.replace('{to_lang}', to_lang)}]
-        
-        # Make the API call
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=sanity + self.messages,
-            max_tokens=self._MAX_TOKENS // 2,
-            temperature=self.temperature,
-            top_p=self.top_p,
-            stop=["'}"]
-        )
-        
-        # Update token counts
-        self.token_count += response.usage.total_tokens
-        self.token_count_last = response.usage.total_tokens
-        
-        # Extract and clean the content
-        content = response.choices[0].message.content.strip()
+    # Call the Groq API with strict JSON rules
+    response = await self.client.chat.completions.create(
+        model=self.model,
+        messages=[
+            {"role": "system", "content": system_msg},
+            {"role": "user",   "content": user_msg}
+        ],
+        max_tokens=self._MAX_TOKENS // 2,
+        temperature=self.temperature,
+        top_p=self.top_p,
+        # no explicit stop; template enforces pure JSON
+    )
+
+    # Update token usage counters
+    self.token_count += response.usage.total_tokens
+    self.token_count_last = response.usage.total_tokens
+
+    # Extract raw model output
+    content = response.choices[0].message.content.strip()
+
+    # Handle context retention
+    if self._CONTEXT_RETENTION:
+        self.messages.append({'role': 'assistant', 'content': content})
+    else:
+        # keep system + user only
         self.messages = self.messages[:-1]
-        
-        # Handle context retention
-        if self._CONTEXT_RETENTION:
-            self.messages += [
-                {'role': 'assistant', 'content': content}
-            ]
-        else:
-            self.messages = self.messages[:-1]
-            
-        # Clean up the response
-        cleaned_content = content.replace("{'translated':'", '').replace('}', '').replace("\\'", "'").replace("\\\"", "\"").strip("'{}")
-        return cleaned_content
+
+    # Clean out the JSON wrapper
+    cleaned_content = (
+        content
+        .replace("{'translated':'", "")
+        .replace('}', "")
+        .replace("\\'", "'")
+        .replace('\\"', '"')
+        .strip("'{}")
+    )
+
+    # --- Step 3a: Bubble-fit enforcement ---
+    orig_len  = len(prompt)
+    trans_len = len(cleaned_content)
+    if trans_len > orig_len * 1.2:
+        self.logger.warning(
+            f"Translation too long ({trans_len} chars vs {orig_len*1.2:.0f} max)."
+        )
+
+    # --- Step 3b: JSON post-process validation ---
+    try:
+        test_obj = json.loads(f'{{"translated": "{cleaned_content}"}}')
+        if list(test_obj.keys()) != ["translated"]:
+            raise ValueError("Unexpected JSON keys")
+    except Exception as e:
+        self.logger.error(f"JSON validation failed: {e}")
+        # (Optional) you could raise or trigger a retry here
+
+    return cleaned_content
