@@ -130,7 +130,7 @@ class GroqTranslator(CommonTranslator):
         self.logger.info(f'Used {self.token_count_last} tokens (Total: {self.token_count})')
         return translations
 
-async def _request_translation(self, to_lang: str, prompt: str) -> str:
+    async def _request_translation(self, to_lang: str, prompt: str) -> str:
     # Step 4: Build prompt using the unified system template
     system_msg = self.chat_system_template.format(to_lang=to_lang)
     user_msg   = prompt
